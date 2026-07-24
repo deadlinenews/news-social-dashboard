@@ -6,10 +6,13 @@ from supabase import create_client
 # Retrieve keys safely from environment variables (No hardcoded secrets!)
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://hwmccakzfrnuwxzdfxef.supabase.co")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3bWNjYWt6ZnJudXd4emRmeGVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4ODE5ODUsImV4cCI6MjEwMDQ1Nzk4NX0.J-k7CPID1jFLoFkhWqXnxGTKS_hG-egKvwqbyVBi_ZM")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 if not APIFY_TOKEN:
     raise ValueError("APIFY_TOKEN environment variable is missing!")
+
+if not SUPABASE_KEY:
+    raise ValueError("SUPABASE_KEY environment variable is missing!")
 
 apify_client = ApifyClient(APIFY_TOKEN)
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
