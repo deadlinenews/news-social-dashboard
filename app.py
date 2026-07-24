@@ -100,13 +100,20 @@ else:
         )
         st.plotly_chart(fig_er, use_container_width=True)
 
+        # Explanatory note below ER chart
+        st.caption(
+            "💡 **How Engagement Rate is calculated:** "
+            "$$\\text{Engagement Rate (\\%)} = \\left( \\frac{\\text{Total Likes}}{\\text{Total Followers} \\times \\text{Posts Count}} \\right) \\times 100$$. "
+            "For profile-only scrapes where total post likes are not provided directly by the scraper, "
+            "an industry-standard benchmark (approx. 1.2%–2.5%) is applied."
+        )
+
     # ---------------------------------------------------------
     # TAB 2: TIMELINE COMPARISON
     # ---------------------------------------------------------
     with tab_timeline:
         st.subheader("📈 Historical Growth & Comparison")
 
-        # Preset & Custom Filters
         col_preset, col_outlet, col_metric = st.columns(3)
         
         with col_preset:
@@ -125,7 +132,6 @@ else:
             start_date = max_date - timedelta(days=90)
             end_date = max_date
         else:
-            # Custom Date Range picker
             date_range = st.date_input(
                 "Select Date Range",
                 value=(min_db_date, max_date),
@@ -142,10 +148,10 @@ else:
             selected_outlet = st.selectbox("Filter Outlet", outlets)
 
         with col_metric:
-            selected_metric = st.selectbox("Select Metric", ["followers", "engagement_rate", "likes"])
+            selected_metric = st.selectbox("Select Metric", ["engagement_rate", "followers", "likes"])
 
         # Filter dataset based on inputs
-        df_filtered = df[(df['record_date'].dt.date >= start_date) & (df['record_date'].dt.date <= end_date)]
+        df_filtered = df[(df['record_date'].dt.date >= start_date) & (df['record_date'].dt.date <= end_date)].copy()
 
         if selected_outlet != "All Outlets":
             df_filtered = df_filtered[df_filtered['outlet_name'] == selected_outlet]
@@ -153,26 +159,55 @@ else:
         if df_filtered.empty:
             st.info("No historical data available for the selected filters.")
         else:
-            # Line Chart over time
+            # Format record_date strictly as string date (YYYY-MM-DD) to prevent axis zooming
+            df_filtered['date_str'] = df_filtered['record_date'].dt.strftime('%Y-%m-%d')
+            unique_dates_count = df_filtered['date_str'].nunique()
+
             metric_title = selected_metric.replace('_', ' ').title()
-            
-            fig_timeline = px.line(
-                df_filtered,
-                x="record_date",
-                y=selected_metric,
-                color="outlet_name",
-                line_dash="platform",
-                markers=True,
-                title=f"{metric_title} Trend ({start_date} to {end_date})",
-                labels={"record_date": "Date", selected_metric: metric_title}
-            )
+
+            # Handle 1-day fallback vs Multi-day trend line
+            if unique_dates_count == 1:
+                st.info("💡 Only 1 day of historical data recorded so far. Showing platform breakdown for the latest run:")
+                
+                fig_timeline = px.bar(
+                    df_filtered,
+                    x="platform",
+                    y=selected_metric,
+                    color="outlet_name",
+                    barmode="group",
+                    text_auto=True if selected_metric == 'followers' else False,
+                    title=f"{metric_title} by Platform ({max_date})",
+                    labels={"platform": "Platform", selected_metric: metric_title}
+                )
+            else:
+                fig_timeline = px.line(
+                    df_filtered,
+                    x="date_str",
+                    y=selected_metric,
+                    color="platform" if selected_outlet != "All Outlets" else "outlet_name",
+                    line_dash="platform" if selected_outlet == "All Outlets" else None,
+                    markers=True,
+                    title=f"{metric_title} Trend ({start_date} to {end_date})",
+                    labels={"date_str": "Date", selected_metric: metric_title}
+                )
+                fig_timeline.update_xaxes(type='category')
+
             fig_timeline.update_layout(hovermode="x unified")
             st.plotly_chart(fig_timeline, use_container_width=True)
 
-            # Summary Table
-            st.markdown("### 📊 Raw Data Log")
+            if selected_metric == "engagement_rate":
+                st.caption(
+                    "💡 **How Engagement Rate is calculated:** "
+                    "$$\\text{Engagement Rate (\\%)} = \\left( \\frac{\\text{Total Likes}}{\\text{Total Followers} \\times \\text{Posts Count}} \\right) \\times 100$$."
+                )
+
+            # Data Table
+            st.markdown("### 📊 Data Summary Table")
+            df_display = df_filtered[['date_str', 'outlet_name', 'platform', 'followers', 'likes', 'engagement_rate']].copy()
+            df_display.columns = ['Date', 'Outlet', 'Platform', 'Followers', 'Likes', 'Engagement Rate (%)']
+            
             st.dataframe(
-                df_filtered[['record_date', 'outlet_name', 'platform', 'followers', 'likes', 'engagement_rate']]
-                .sort_values('record_date', ascending=False),
-                use_container_width=True
+                df_display.sort_values('Date', ascending=False),
+                use_container_width=True,
+                hide_index=True
             )
