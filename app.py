@@ -31,7 +31,7 @@ def load_data():
     df = pd.DataFrame(response.data)
     
     if not df.empty:
-        # 1. Normalize all platform names to prevent duplicate columns
+        # Standardize platform names
         platform_map = {
             'twitter': 'X',
             'x': 'X',
@@ -42,11 +42,23 @@ def load_data():
         }
         df['platform'] = df['platform'].astype(str).str.lower().map(lambda p: platform_map.get(p, p.title()))
         
-        # 2. Keep only the latest entry for each platform per outlet per day (prevents stacked duplicates)
+        # Deduplicate: Keep latest record per platform per outlet per day
         if 'id' in df.columns:
             df = df.sort_values('id').groupby(['record_date', 'outlet_name', 'platform'], as_index=False).last()
         else:
             df = df.groupby(['record_date', 'outlet_name', 'platform'], as_index=False).last()
+
+        # Ensure numeric values and calculate ER if missing from API
+        df['followers'] = pd.to_numeric(df['followers'], errors='coerce').fillna(0)
+        df['likes'] = pd.to_numeric(df['likes'], errors='coerce').fillna(0)
+        df['posts_count'] = pd.to_numeric(df['posts_count'], errors='coerce').fillna(1)
+        
+        # Recalculate ER dynamically if current database ER is 0 but likes exist
+        df['engagement_rate'] = df.apply(
+            lambda row: round((row['likes'] / (row['followers'] * row['posts_count'])) * 100, 2)
+            if row['followers'] > 0 and row['likes'] > 0 else row['engagement_rate'],
+            axis=1
+        )
 
     return df
 
