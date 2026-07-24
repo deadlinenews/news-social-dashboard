@@ -26,7 +26,7 @@ def log_metric(outlet, platform, followers, likes, posts_count):
 def run_daily_collection():
     tracked_data = [
         # Deadline News
-        {"outlet": "Deadline", "platform": "X", "followers": 3500000, "likes": 15000, "posts": 25},
+        {"outlet": "Deadline", "platform": "X", "followers": 4099, "likes": 15000, "posts": 25},
         {"outlet": "Deadline", "platform": "Facebook", "followers": 180000, "likes": 5200, "posts": 12},
         {"outlet": "Deadline", "platform": "Instagram", "followers": 95000, "likes": 8400, "posts": 8},
         {"outlet": "Deadline", "platform": "LinkedIn", "followers": 42000, "likes": 1800, "posts": 5},
