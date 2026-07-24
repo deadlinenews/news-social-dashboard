@@ -1,26 +1,13 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from datetime import datetime, timedelta
 from supabase import create_client
 
-st.set_page_config(page_title="Social Media Dashboard", layout="wide")
+# Streamlit Page Config
+st.set_page_config(page_title="News Social Dashboard", layout="wide")
 
-# Custom CSS for modern card layout
-st.markdown("""
-    <style>
-    .metric-card {
-        background-color: #1e222d;
-        border-radius: 10px;
-        padding: 20px;
-        border-left: 5px solid #4f46e5;
-        margin-bottom: 15px;
-    }
-    .metric-title { font-size: 14px; color: #9ca3af; font-weight: 600; }
-    .metric-value { font-size: 28px; font-weight: 700; color: #ffffff; }
-    .platform-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
-    </style>
-""", unsafe_allow_html=True)
-
+# Supabase Credentials from Streamlit Secrets
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 
@@ -42,13 +29,10 @@ def load_data():
         }
         df['platform'] = df['platform'].astype(str).str.lower().map(lambda p: platform_map.get(p, p.title()))
         
-        # Deduplicate: Keep latest record per platform per outlet per day
-        if 'id' in df.columns:
-            df = df.sort_values('id').groupby(['record_date', 'outlet_name', 'platform'], as_index=False).last()
-        else:
-            df = df.groupby(['record_date', 'outlet_name', 'platform'], as_index=False).last()
-
-        # Ensure numeric values and calculate ER if missing from API
+        # Format date column
+        df['record_date'] = pd.to_datetime(df['record_date'])
+        
+        # Ensure numeric types
         df['followers'] = pd.to_numeric(df['followers'], errors='coerce').fillna(0)
         df['likes'] = pd.to_numeric(df['likes'], errors='coerce').fillna(0)
         df['posts_count'] = pd.to_numeric(df['posts_count'], errors='coerce').fillna(1)
@@ -62,84 +46,133 @@ def load_data():
 
     return df
 
+st.title("📰 News Social Media Dashboard")
+
 df = load_data()
 
-st.title("⚡ Social Media Analytics Dashboard")
-st.caption("Live metrics for **Deadline** & **The Edinburgh Reporter**")
-
 if df.empty:
-    st.warning("No data found in Supabase. Run collector.py first!")
+    st.warning("No data found in Supabase database.")
 else:
-    # Filter to only active target outlets
-    df = df[df['outlet_name'].isin(['Deadline', 'The Edinburgh Reporter'])]
+    # Create Tabs
+    tab_overview, tab_timeline = st.tabs(["📊 Overview", "📈 Timeline Comparison"])
 
-    # Top Macro Overview
-    st.markdown("### Executive Summary")
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.markdown(f'<div class="metric-card"><div class="metric-title">TOTAL AUDIENCE</div><div class="metric-value">{df["followers"].sum():,}</div></div>', unsafe_allow_html=True)
-    with c2:
-        st.markdown(f'<div class="metric-card"><div class="metric-title">TOTAL ENGAGEMENTS</div><div class="metric-value">{df["likes"].sum():,}</div></div>', unsafe_allow_html=True)
-    with c3:
-        st.markdown(f'<div class="metric-card"><div class="metric-title">POSTS TRACKED</div><div class="metric-value">{df["posts_count"].sum():,}</div></div>', unsafe_allow_html=True)
-    with c4:
-        st.markdown(f'<div class="metric-card"><div class="metric-title">AVG ENGAGEMENT RATE</div><div class="metric-value">{df["engagement_rate"].mean():.2f}%</div></div>', unsafe_allow_html=True)
-
-    # Tabs per Outlet & Overview
-    tab_overview, tab_deadline, tab_edinburgh = st.tabs(["📊 Cross-Outlet Comparison", "🔴 Deadline News", "🔵 The Edinburgh Reporter"])
-
+    # ---------------------------------------------------------
+    # TAB 1: OVERVIEW (Latest Snapshot)
+    # ---------------------------------------------------------
     with tab_overview:
-        st.subheader("Platform Audience Breakdown")
-        fig_bar = px.bar(
-            df, 
-            x="platform", 
-            y="followers", 
+        # Get latest day's data
+        latest_date = df['record_date'].max()
+        df_latest = df[df['record_date'] == latest_date]
+        
+        # Deduplicate latest day
+        df_latest = df_latest.groupby(['outlet_name', 'platform'], as_index=False).last()
+
+        # Top KPIs
+        total_followers = int(df_latest['followers'].sum())
+        avg_er = round(df_latest['engagement_rate'].mean(), 2)
+        
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Latest Snapshot Date", latest_date.strftime('%Y-%m-%d'))
+        col2.metric("Total Followers (All Outlets)", f"{total_followers:,}")
+        col3.metric("Avg Engagement Rate", f"{avg_er}%")
+
+        st.divider()
+
+        # Overview Charts
+        fig_followers = px.bar(
+            df_latest,
+            x="platform",
+            y="followers",
             color="outlet_name",
             barmode="group",
             text_auto='.2s',
-            template="plotly_dark",
-            height=400
+            title="Audience Breakdown by Platform"
         )
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig_followers, use_container_width=True)
 
-        st.subheader("Engagement Rate (%) by Platform")
         fig_er = px.bar(
-            df, 
-            x="platform", 
-            y="engagement_rate", 
+            df_latest,
+            x="platform",
+            y="engagement_rate",
             color="outlet_name",
             barmode="group",
-            text_auto='.2f',
-            template="plotly_dark",
-            height=400
+            title="Engagement Rate (%) by Platform"
         )
         st.plotly_chart(fig_er, use_container_width=True)
 
-    # Helper function to render outlet specific cards
-    def render_outlet_view(outlet_name):
-        outlet_df = df[df['outlet_name'] == outlet_name]
-        st.subheader(f"{outlet_name} Channel Cards")
+    # ---------------------------------------------------------
+    # TAB 2: TIMELINE COMPARISON
+    # ---------------------------------------------------------
+    with tab_timeline:
+        st.subheader("📈 Historical Growth & Comparison")
+
+        # Preset & Custom Filters
+        col_preset, col_outlet, col_metric = st.columns(3)
         
-        cols = st.columns(len(outlet_df))
-        for idx, (_, row) in enumerate(outlet_df.iterrows()):
-            with cols[idx]:
-                st.markdown(f"""
-                <div class="metric-card">
-                    <div class="metric-title">{row['platform'].upper()}</div>
-                    <div class="metric-value">{row['followers']:,}</div>
-                    <p style="color:#9ca3af; margin: 5px 0 0 0;">Likes: <b>{row['likes']:,}</b> | ER: <b>{row['engagement_rate']}%</b></p>
-                </div>
-                """, unsafe_allow_html=True)
+        with col_preset:
+            time_preset = st.selectbox(
+                "Timeframe Range",
+                ["Last 30 Days", "Last 90 Days", "Custom Date Range"]
+            )
 
-        st.subheader("Detailed Breakdown")
-        st.dataframe(
-            outlet_df[['platform', 'followers', 'likes', 'posts_count', 'engagement_rate']], 
-            use_container_width=True, 
-            hide_index=True
-        )
+        max_date = df['record_date'].max().date()
+        min_db_date = df['record_date'].min().date()
 
-    with tab_deadline:
-        render_outlet_view("Deadline")
+        if time_preset == "Last 30 Days":
+            start_date = max_date - timedelta(days=30)
+            end_date = max_date
+        elif time_preset == "Last 90 Days":
+            start_date = max_date - timedelta(days=90)
+            end_date = max_date
+        else:
+            # Custom Date Range picker
+            date_range = st.date_input(
+                "Select Date Range",
+                value=(min_db_date, max_date),
+                min_value=min_db_date,
+                max_value=max_date
+            )
+            if isinstance(date_range, tuple) and len(date_range) == 2:
+                start_date, end_date = date_range
+            else:
+                start_date, end_date = min_db_date, max_date
 
-    with tab_edinburgh:
-        render_outlet_view("The Edinburgh Reporter")
+        with col_outlet:
+            outlets = ["All Outlets"] + list(df['outlet_name'].unique())
+            selected_outlet = st.selectbox("Filter Outlet", outlets)
+
+        with col_metric:
+            selected_metric = st.selectbox("Select Metric", ["followers", "engagement_rate", "likes"])
+
+        # Filter dataset based on inputs
+        df_filtered = df[(df['record_date'].dt.date >= start_date) & (df['record_date'].dt.date <= end_date)]
+
+        if selected_outlet != "All Outlets":
+            df_filtered = df_filtered[df_filtered['outlet_name'] == selected_outlet]
+
+        if df_filtered.empty:
+            st.info("No historical data available for the selected filters.")
+        else:
+            # Line Chart over time
+            metric_title = selected_metric.replace('_', ' ').title()
+            
+            fig_timeline = px.line(
+                df_filtered,
+                x="record_date",
+                y=selected_metric,
+                color="outlet_name",
+                line_dash="platform",
+                markers=True,
+                title=f"{metric_title} Trend ({start_date} to {end_date})",
+                labels={"record_date": "Date", selected_metric: metric_title}
+            )
+            fig_timeline.update_layout(hovermode="x unified")
+            st.plotly_chart(fig_timeline, use_container_width=True)
+
+            # Summary Table
+            st.markdown("### 📊 Raw Data Log")
+            st.dataframe(
+                df_filtered[['record_date', 'outlet_name', 'platform', 'followers', 'likes', 'engagement_rate']]
+                .sort_values('record_date', ascending=False),
+                use_container_width=True
+            )
