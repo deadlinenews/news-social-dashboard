@@ -2,22 +2,13 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from supabase import create_client
-from ai_engine import generate_ai_insights
 
-st.set_page_config(page_title="News Outlet Social Dashboard", layout="wide")
+st.set_page_config(page_title="Social Media Tracker", layout="wide")
 
-st.title("📰 News Outlet Social Media Tracker")
-st.markdown("Tracking **Deadline**, **The Edinburgh Reporter**, and **The Glasgow Reporter** across 6 platforms.")
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 
-try:
-    SUPABASE_URL = st.secrets["SUPABASE_URL"]
-    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
-    OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
-except Exception:
-    st.error("Missing cloud configuration secrets. Please configure secrets in Streamlit Cloud.")
-    st.stop()
-
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=60)
 def load_data():
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
     response = supabase.table('daily_stats').select('*').execute()
@@ -25,47 +16,49 @@ def load_data():
 
 df = load_data()
 
+st.title("📰 News Outlet Social Media Tracker")
+st.markdown("Tracking **Deadline** and **The Edinburgh Reporter** across active channels.")
+
 if df.empty:
-    st.warning("Database is empty. Waiting for daily Apify run to populate data.")
+    st.warning("Database is empty.")
 else:
+    # Top Overview Metric Cards (Like modern dashboard cards)
+    st.subheader("Overview")
+    total_followers = df['followers'].sum()
+    total_posts = df['posts_count'].sum()
+    avg_er = df['engagement_rate'].mean()
+
     col1, col2, col3 = st.columns(3)
-    col1.metric("Total Profiles Monitored", len(df[['outlet_name', 'platform']].drop_duplicates()))
-    col2.metric("Total Combined Reach", f"{df['followers'].sum():,}")
-    col3.metric("Average Engagement Rate", f"{df['engagement_rate'].mean():.2f}%")
+    col1.metric("Total Followers Across Channels", f"{total_followers:,}")
+    col2.metric("Total Posts Logged", f"{total_posts:,}")
+    col3.metric("Avg. Engagement Rate", f"{avg_er:.2f}%")
 
-    st.markdown("---")
+    st.divider()
 
-    st.subheader("🤖 AI Performance Insights")
-    if st.button("Generate Fresh Analysis"):
-        with st.spinner("Analyzing cross-channel metrics..."):
-            summary = generate_ai_insights(OPENAI_API_KEY, SUPABASE_URL, SUPABASE_KEY)
-            st.info(summary)
+    # Visualizations (Side-by-Side Charts)
+    col_left, col_right = st.columns(2)
 
-    st.markdown("---")
-
-    chart_col1, chart_col2 = st.columns(2)
-
-    with chart_col1:
-        st.subheader("Follower Distribution by Outlet")
+    with col_left:
+        st.subheader("Follower Count by Platform & Outlet")
         fig_followers = px.bar(
             df, 
-            x="outlet_name", 
+            x="platform", 
             y="followers", 
-            color="platform", 
-            barmode="group"
+            color="outlet_name", 
+            barmode="group",
+            text_auto='.2s',
+            template="plotly_dark"
         )
         st.plotly_chart(fig_followers, use_container_width=True)
 
-    with chart_col2:
-        st.subheader("Engagement Rate (%) Comparison")
-        fig_er = px.bar(
+    with col_right:
+        st.subheader("Engagement Rate (%) by Platform")
+        fig_er = px.line(
             df, 
             x="platform", 
             y="engagement_rate", 
             color="outlet_name", 
-            barmode="group"
+            markers=True,
+            template="plotly_dark"
         )
         st.plotly_chart(fig_er, use_container_width=True)
-
-    with st.expander("View Raw Database Entries"):
-        st.dataframe(df.sort_values(by="record_date", ascending=False), use_container_width=True)
