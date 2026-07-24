@@ -1,0 +1,30 @@
+name: Daily Social Scraper Sync
+
+on:
+  schedule:
+    - cron: '0 9  * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install apify-client supabase
+
+      - name: Run Apify to Supabase Sync
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_URL: "https://hwmccakzfrnuwxzdfxef.supabase.co"
+        run: |
+          python sync_apify.py
