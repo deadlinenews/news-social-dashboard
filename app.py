@@ -28,7 +28,27 @@ SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 def load_data():
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
     response = supabase.table('daily_stats').select('*').execute()
-    return pd.DataFrame(response.data)
+    df = pd.DataFrame(response.data)
+    
+    if not df.empty:
+        # 1. Normalize all platform names to prevent duplicate columns
+        platform_map = {
+            'twitter': 'X',
+            'x': 'X',
+            'facebook': 'Facebook',
+            'instagram': 'Instagram',
+            'linkedin': 'LinkedIn',
+            'threads': 'Threads'
+        }
+        df['platform'] = df['platform'].astype(str).str.lower().map(lambda p: platform_map.get(p, p.title()))
+        
+        # 2. Keep only the latest entry for each platform per outlet per day (prevents stacked duplicates)
+        if 'id' in df.columns:
+            df = df.sort_values('id').groupby(['record_date', 'outlet_name', 'platform'], as_index=False).last()
+        else:
+            df = df.groupby(['record_date', 'outlet_name', 'platform'], as_index=False).last()
+
+    return df
 
 df = load_data()
 
