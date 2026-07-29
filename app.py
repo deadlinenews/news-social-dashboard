@@ -2,7 +2,9 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from database import fetch_latest_metrics, fetch_timeline_data
+
+# FIXED IMPORT NAMES: get_latest_metrics and get_timeline_data
+from database import get_latest_metrics, get_timeline_data
 
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION & CUSTOM CSS (PURPLE & ORANGE LIGHT THEME)
@@ -83,26 +85,27 @@ st.markdown("""
 # -----------------------------------------------------------------------------
 # 2. DATA LOADING & SIDEBAR FILTERS
 # -----------------------------------------------------------------------------
-df_latest = fetch_latest_metrics()
-df_timeline = fetch_timeline_data()
+df_latest = get_latest_metrics()
+df_timeline = get_timeline_data()
 
 st.sidebar.image("https://img.icons8.com/fluent/96/000000/analytics.png", width=60)
 st.sidebar.title("Dashboard Controls")
 
 # Outlet Filter
-outlets = ["All Newspapers"] + list(df_latest["outlet_name"].unique()) if not df_latest.empty else ["All Newspapers"]
+outlets = ["All Newspapers"] + list(df_latest["outlet_name"].unique()) if not df_latest.empty and "outlet_name" in df_latest.columns else ["All Newspapers"]
 selected_outlet = st.sidebar.selectbox("Select Newspaper", outlets)
 
 # Platform Filter
-platforms = ["All Platforms"] + list(df_latest["platform"].unique()) if not df_latest.empty else ["All Platforms"]
+platforms = ["All Platforms"] + list(df_latest["platform"].unique()) if not df_latest.empty and "platform" in df_latest.columns else ["All Platforms"]
 selected_platform = st.sidebar.selectbox("Select Platform", platforms)
 
 # Filter Dataframe
-filtered_df = df_latest.copy()
-if selected_outlet != "All Newspapers":
-    filtered_df = filtered_df[filtered_df["outlet_name"] == selected_outlet]
-if selected_platform != "All Platforms":
-    filtered_df = filtered_df[filtered_df["platform"] == selected_platform]
+filtered_df = df_latest.copy() if not df_latest.empty else pd.DataFrame()
+if not filtered_df.empty:
+    if selected_outlet != "All Newspapers":
+        filtered_df = filtered_df[filtered_df["outlet_name"] == selected_outlet]
+    if selected_platform != "All Platforms":
+        filtered_df = filtered_df[filtered_df["platform"] == selected_platform]
 
 # -----------------------------------------------------------------------------
 # 3. MAIN DASHBOARD HEADER
@@ -116,11 +119,11 @@ st.divider()
 # -----------------------------------------------------------------------------
 col1, col2, col3, col4, col5 = st.columns(5)
 
-total_followers = filtered_df["followers"].sum() if "followers" in filtered_df.columns else 0
-total_posts = filtered_df["posts"].sum() if "posts" in filtered_df.columns else 0
-total_likes = filtered_df["likes"].sum() if "likes" in filtered_df.columns else 0
-total_shares = filtered_df["shares"].sum() if "shares" in filtered_df.columns else 0
-total_comments = filtered_df["comments"].sum() if "comments" in filtered_df.columns else 0
+total_followers = int(filtered_df["followers"].sum()) if not filtered_df.empty and "followers" in filtered_df.columns else 0
+total_posts = int(filtered_df["posts_count"].sum()) if not filtered_df.empty and "posts_count" in filtered_df.columns else 0
+total_likes = int(filtered_df["likes_count"].sum()) if not filtered_df.empty and "likes_count" in filtered_df.columns else 0
+total_shares = int(filtered_df["shares_count"].sum()) if not filtered_df.empty and "shares_count" in filtered_df.columns else 0
+total_comments = int(filtered_df["comments_count"].sum()) if not filtered_df.empty and "comments_count" in filtered_df.columns else 0
 
 with col1:
     st.markdown(f"""
@@ -149,7 +152,7 @@ with col3:
 with col4:
     st.markdown(f"""
     <div class="metric-card metric-card-orange">
-        <div class="metric-title">Total Shares / Retweets</div>
+        <div class="metric-title">Total Shares</div>
         <div class="metric-value">{total_shares:,}</div>
     </div>
     """, unsafe_allow_html=True)
@@ -172,12 +175,12 @@ with tab1:
     
     with col_chart1:
         st.subheader("Follower Distribution by Platform")
-        if not filtered_df.empty:
+        if not filtered_df.empty and "followers" in filtered_df.columns:
             fig_bar = px.bar(
                 filtered_df,
                 x="platform",
                 y="followers",
-                color="outlet_name",
+                color="outlet_name" if "outlet_name" in filtered_df.columns else None,
                 barmode="group",
                 color_discrete_sequence=["#6B46C1", "#DD6B20", "#319795", "#D69E2E"],
                 text_auto='.2s'
@@ -192,12 +195,12 @@ with tab1:
             st.plotly_chart(fig_bar, use_container_width=True)
             
     with col_chart2:
-        st.subheader("Engagement Share (Likes & Comments)")
-        if not filtered_df.empty and "likes" in filtered_df.columns:
+        st.subheader("Engagement Share (Likes)")
+        if not filtered_df.empty and "likes_count" in filtered_df.columns:
             fig_pie = px.pie(
                 filtered_df,
                 names="platform",
-                values="likes",
+                values="likes_count",
                 color_discrete_sequence=["#6B46C1", "#805AD5", "#9F7AEA", "#DD6B20", "#ED8936"]
             )
             fig_pie.update_layout(
@@ -211,35 +214,30 @@ with tab2:
     st.subheader("Raw Metrics Breakdown")
     st.markdown("Detailed breakdown of posts, reach, likes, shares, and comments across all outlets.")
     
-    # Display raw data table with formatted numbers
-    display_cols = [col for col in ["outlet_name", "platform", "followers", "posts", "likes", "shares", "comments"] if col in filtered_df.columns]
-    st.dataframe(
-        filtered_df[display_cols].style.format({
-            "followers": "{:,}",
-            "posts": "{:,}",
-            "likes": "{:,}",
-            "shares": "{:,}",
-            "comments": "{:,}"
-        }),
-        use_container_width=True
-    )
+    if not filtered_df.empty:
+        possible_cols = ["outlet_name", "platform", "followers", "posts_count", "likes_count", "shares_count", "comments_count", "engagement_rate"]
+        display_cols = [col for col in possible_cols if col in filtered_df.columns]
+        st.dataframe(
+            filtered_df[display_cols],
+            use_container_width=True
+        )
+    else:
+        st.info("No data available for raw breakdown.")
 
 with tab3:
     st.subheader("Performance Over Time")
     if not df_timeline.empty:
-        # Filter timeline dataset based on user selections
         timeline_filtered = df_timeline.copy()
-        if selected_outlet != "All Newspapers":
+        if selected_outlet != "All Newspapers" and "outlet_name" in timeline_filtered.columns:
             timeline_filtered = timeline_filtered[timeline_filtered["outlet_name"] == selected_outlet]
-        if selected_platform != "All Platforms":
+        if selected_platform != "All Platforms" and "platform" in timeline_filtered.columns:
             timeline_filtered = timeline_filtered[timeline_filtered["platform"] == selected_platform]
             
         fig_line = px.line(
             timeline_filtered,
-            x="snapshot_date",
-            y="followers",
-            color="platform",
-            line_group="outlet_name",
+            x="snapshot_date" if "snapshot_date" in timeline_filtered.columns else timeline_filtered.index,
+            y="followers" if "followers" in timeline_filtered.columns else None,
+            color="platform" if "platform" in timeline_filtered.columns else None,
             color_discrete_sequence=["#6B46C1", "#DD6B20", "#319795", "#3182CE"]
         )
         fig_line.update_layout(
