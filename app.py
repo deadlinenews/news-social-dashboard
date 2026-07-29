@@ -3,12 +3,12 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-# CORRECT FUNCTION NAMES FROM YOUR DATABASE.PY FILE
+# IMPORT THE EXACT FUNCTIONS DEFINED IN YOUR DATABASE.PY FILE
+db_available = False
 try:
-    from database import fetch_latest_metrics, fetch_timeline_data
+    from database import get_latest_metrics, get_history
     db_available = True
 except Exception as e:
-    db_available = False
     db_error = str(e)
 
 # -----------------------------------------------------------------------------
@@ -23,15 +23,20 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+    /* Global Page Background & Text Colors */
     .main {
         background-color: #f8f9fa;
         color: #2d3748;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
+    
+    /* Headers Styling */
     h1, h2, h3 {
         color: #5a2789 !important;
         font-weight: 700 !important;
     }
+    
+    /* Stat Cards */
     .metric-card {
         background: #ffffff;
         border-radius: 12px;
@@ -56,6 +61,8 @@ st.markdown("""
         font-weight: 800;
         color: #1a202c;
     }
+
+    /* Tabs Styling */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
         border-bottom: 2px solid #e2e8f0;
@@ -79,8 +86,8 @@ st.markdown("""
 # -----------------------------------------------------------------------------
 if db_available:
     try:
-        df_latest = fetch_latest_metrics()
-        df_timeline = fetch_timeline_data()
+        df_latest = get_latest_metrics()
+        df_timeline = get_history()
     except Exception as err:
         st.error(f"Error executing database functions: {err}")
         df_latest = pd.DataFrame()
@@ -104,7 +111,7 @@ if not df_latest.empty and "platform" in df_latest.columns:
     platforms += list(df_latest["platform"].dropna().unique())
 selected_platform = st.sidebar.selectbox("Select Platform", platforms)
 
-# Filter Dataframes
+# Filter Dataframe
 filtered_df = df_latest.copy() if not df_latest.empty else pd.DataFrame()
 if not filtered_df.empty:
     if selected_outlet != "All Newspapers" and "outlet_name" in filtered_df.columns:
@@ -221,12 +228,12 @@ with tab1:
 
 with tab2:
     st.subheader("Raw Metrics Breakdown")
-    st.markdown("Detailed view of raw metrics per platform and publication.")
+    st.markdown("Detailed breakdown of posts, reach, likes, shares, and comments across all outlets.")
     
     if not filtered_df.empty:
         st.dataframe(filtered_df, use_container_width=True)
     else:
-        st.info("No data currently loaded.")
+        st.info("No raw data currently loaded.")
 
 with tab3:
     st.subheader("Performance Over Time")
