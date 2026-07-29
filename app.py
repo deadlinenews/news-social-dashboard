@@ -3,11 +3,16 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-# FIXED IMPORT NAMES: get_latest_metrics and get_timeline_data
-from database import get_latest_metrics, get_timeline_data
+# CORRECT FUNCTION NAMES FROM YOUR DATABASE.PY FILE
+try:
+    from database import fetch_latest_metrics, fetch_timeline_data
+    db_available = True
+except Exception as e:
+    db_available = False
+    db_error = str(e)
 
 # -----------------------------------------------------------------------------
-# 1. PAGE CONFIGURATION & CUSTOM CSS (PURPLE & ORANGE LIGHT THEME)
+# 1. PAGE CONFIGURATION & CUSTOM LIGHT THEME (PURPLE & ORANGE)
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Social Media Dashboard",
@@ -18,20 +23,15 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* Global Background & Base Typography */
     .main {
         background-color: #f8f9fa;
         color: #2d3748;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
-    
-    /* Header Styling */
     h1, h2, h3 {
         color: #5a2789 !important;
         font-weight: 700 !important;
     }
-    
-    /* Custom Metric Cards */
     .metric-card {
         background: #ffffff;
         border-radius: 12px;
@@ -56,14 +56,6 @@ st.markdown("""
         font-weight: 800;
         color: #1a202c;
     }
-    .metric-subtext {
-        font-size: 12px;
-        color: #38a169;
-        font-weight: 600;
-        margin-top: 4px;
-    }
-
-    /* Streamlit Tab Styling */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
         border-bottom: 2px solid #e2e8f0;
@@ -85,26 +77,39 @@ st.markdown("""
 # -----------------------------------------------------------------------------
 # 2. DATA LOADING & SIDEBAR FILTERS
 # -----------------------------------------------------------------------------
-df_latest = get_latest_metrics()
-df_timeline = get_timeline_data()
+if db_available:
+    try:
+        df_latest = fetch_latest_metrics()
+        df_timeline = fetch_timeline_data()
+    except Exception as err:
+        st.error(f"Error executing database functions: {err}")
+        df_latest = pd.DataFrame()
+        df_timeline = pd.DataFrame()
+else:
+    st.error(f"Failed to load database module: {db_error}")
+    df_latest = pd.DataFrame()
+    df_timeline = pd.DataFrame()
 
-st.sidebar.image("https://img.icons8.com/fluent/96/000000/analytics.png", width=60)
 st.sidebar.title("Dashboard Controls")
 
 # Outlet Filter
-outlets = ["All Newspapers"] + list(df_latest["outlet_name"].unique()) if not df_latest.empty and "outlet_name" in df_latest.columns else ["All Newspapers"]
+outlets = ["All Newspapers"]
+if not df_latest.empty and "outlet_name" in df_latest.columns:
+    outlets += list(df_latest["outlet_name"].dropna().unique())
 selected_outlet = st.sidebar.selectbox("Select Newspaper", outlets)
 
 # Platform Filter
-platforms = ["All Platforms"] + list(df_latest["platform"].unique()) if not df_latest.empty and "platform" in df_latest.columns else ["All Platforms"]
+platforms = ["All Platforms"]
+if not df_latest.empty and "platform" in df_latest.columns:
+    platforms += list(df_latest["platform"].dropna().unique())
 selected_platform = st.sidebar.selectbox("Select Platform", platforms)
 
-# Filter Dataframe
+# Filter Dataframes
 filtered_df = df_latest.copy() if not df_latest.empty else pd.DataFrame()
 if not filtered_df.empty:
-    if selected_outlet != "All Newspapers":
+    if selected_outlet != "All Newspapers" and "outlet_name" in filtered_df.columns:
         filtered_df = filtered_df[filtered_df["outlet_name"] == selected_outlet]
-    if selected_platform != "All Platforms":
+    if selected_platform != "All Platforms" and "platform" in filtered_df.columns:
         filtered_df = filtered_df[filtered_df["platform"] == selected_platform]
 
 # -----------------------------------------------------------------------------
@@ -120,10 +125,10 @@ st.divider()
 col1, col2, col3, col4, col5 = st.columns(5)
 
 total_followers = int(filtered_df["followers"].sum()) if not filtered_df.empty and "followers" in filtered_df.columns else 0
-total_posts = int(filtered_df["posts_count"].sum()) if not filtered_df.empty and "posts_count" in filtered_df.columns else 0
-total_likes = int(filtered_df["likes_count"].sum()) if not filtered_df.empty and "likes_count" in filtered_df.columns else 0
-total_shares = int(filtered_df["shares_count"].sum()) if not filtered_df.empty and "shares_count" in filtered_df.columns else 0
-total_comments = int(filtered_df["comments_count"].sum()) if not filtered_df.empty and "comments_count" in filtered_df.columns else 0
+total_posts = int(filtered_df["posts"].sum()) if not filtered_df.empty and "posts" in filtered_df.columns else 0
+total_likes = int(filtered_df["likes"].sum()) if not filtered_df.empty and "likes" in filtered_df.columns else 0
+total_shares = int(filtered_df["shares"].sum()) if not filtered_df.empty and "shares" in filtered_df.columns else 0
+total_comments = int(filtered_df["comments"].sum()) if not filtered_df.empty and "comments" in filtered_df.columns else 0
 
 with col1:
     st.markdown(f"""
@@ -175,7 +180,7 @@ with tab1:
     
     with col_chart1:
         st.subheader("Follower Distribution by Platform")
-        if not filtered_df.empty and "followers" in filtered_df.columns:
+        if not filtered_df.empty and "followers" in filtered_df.columns and "platform" in filtered_df.columns:
             fig_bar = px.bar(
                 filtered_df,
                 x="platform",
@@ -193,14 +198,16 @@ with tab1:
                 yaxis=dict(showgrid=True, gridcolor="#E2E8F0")
             )
             st.plotly_chart(fig_bar, use_container_width=True)
+        else:
+            st.info("No follower metrics available to plot.")
             
     with col_chart2:
         st.subheader("Engagement Share (Likes)")
-        if not filtered_df.empty and "likes_count" in filtered_df.columns:
+        if not filtered_df.empty and "likes" in filtered_df.columns and "platform" in filtered_df.columns:
             fig_pie = px.pie(
                 filtered_df,
                 names="platform",
-                values="likes_count",
+                values="likes",
                 color_discrete_sequence=["#6B46C1", "#805AD5", "#9F7AEA", "#DD6B20", "#ED8936"]
             )
             fig_pie.update_layout(
@@ -209,24 +216,21 @@ with tab1:
                 font=dict(color="#2D3748")
             )
             st.plotly_chart(fig_pie, use_container_width=True)
+        else:
+            st.info("No engagement metrics available to plot.")
 
 with tab2:
     st.subheader("Raw Metrics Breakdown")
-    st.markdown("Detailed breakdown of posts, reach, likes, shares, and comments across all outlets.")
+    st.markdown("Detailed view of raw metrics per platform and publication.")
     
     if not filtered_df.empty:
-        possible_cols = ["outlet_name", "platform", "followers", "posts_count", "likes_count", "shares_count", "comments_count", "engagement_rate"]
-        display_cols = [col for col in possible_cols if col in filtered_df.columns]
-        st.dataframe(
-            filtered_df[display_cols],
-            use_container_width=True
-        )
+        st.dataframe(filtered_df, use_container_width=True)
     else:
-        st.info("No data available for raw breakdown.")
+        st.info("No data currently loaded.")
 
 with tab3:
     st.subheader("Performance Over Time")
-    if not df_timeline.empty:
+    if not df_timeline.empty and "snapshot_date" in df_timeline.columns:
         timeline_filtered = df_timeline.copy()
         if selected_outlet != "All Newspapers" and "outlet_name" in timeline_filtered.columns:
             timeline_filtered = timeline_filtered[timeline_filtered["outlet_name"] == selected_outlet]
@@ -235,7 +239,7 @@ with tab3:
             
         fig_line = px.line(
             timeline_filtered,
-            x="snapshot_date" if "snapshot_date" in timeline_filtered.columns else timeline_filtered.index,
+            x="snapshot_date",
             y="followers" if "followers" in timeline_filtered.columns else None,
             color="platform" if "platform" in timeline_filtered.columns else None,
             color_discrete_sequence=["#6B46C1", "#DD6B20", "#319795", "#3182CE"]
@@ -249,4 +253,4 @@ with tab3:
         )
         st.plotly_chart(fig_line, use_container_width=True)
     else:
-        st.info("No historical timeline data available yet.")
+        st.info("No historical timeline data recorded yet.")
