@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-# IMPORT THE EXACT FUNCTIONS DEFINED IN YOUR DATABASE.PY FILE
+# Import database functions safely
 db_available = False
 try:
     from database import get_latest_metrics, get_history
