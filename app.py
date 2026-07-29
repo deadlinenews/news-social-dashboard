@@ -188,7 +188,7 @@ with tab3:
         )
         st.plotly_chart(fig_line, use_container_width=True)
     else:
-        st.info("No historical timeline data recorded yet.")    }
+        st.info("No historical timeline data recorded yet.")    
     
     /* Stat Cards */
     .metric-card {
