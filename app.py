@@ -51,6 +51,14 @@ st.markdown("""
         font-weight: 800; 
         color: #1a202c; 
     }
+    .sub-card {
+        background: #ffffff;
+        border-radius: 10px;
+        padding: 16px;
+        border-left: 4px solid #6b46c1;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+        margin-bottom: 12px;
+    }
     .stTabs [data-baseweb="tab-list"] { 
         gap: 8px; 
         border-bottom: 2px solid #e2e8f0; 
@@ -123,13 +131,22 @@ st.title("Social Media Performance Dashboard")
 st.markdown(f"**Viewing:** `{selected_outlet}` | **Platform:** `{selected_platform}`")
 st.divider()
 
+# -----------------------------------------------------------------------------
+# TOP SUMMARY METRICS
+# -----------------------------------------------------------------------------
 col1, col2, col3, col4, col5 = st.columns(5)
 
-total_followers = int(filtered_df["followers"].sum()) if not filtered_df.empty and "followers" in filtered_df.columns else 0
-total_posts = int(filtered_df["posts"].sum()) if not filtered_df.empty and "posts" in filtered_df.columns else 0
-total_likes = int(filtered_df["likes"].sum()) if not filtered_df.empty and "likes" in filtered_df.columns else 0
-total_shares = int(filtered_df["shares"].sum()) if not filtered_df.empty and "shares" in filtered_df.columns else 0
-total_comments = int(filtered_df["comments"].sum()) if not filtered_df.empty and "comments" in filtered_df.columns else 0
+# Deduplicate to ensure summary metrics operate on the single latest run per outlet/platform
+if not filtered_df.empty and "record_date" in filtered_df.columns and "outlet_name" in filtered_df.columns and "platform" in filtered_df.columns:
+    summary_df = filtered_df.sort_values("record_date", ascending=False).groupby(["outlet_name", "platform"]).first().reset_index()
+else:
+    summary_df = filtered_df.copy()
+
+total_followers = int(summary_df["followers"].sum()) if not summary_df.empty and "followers" in summary_df.columns else 0
+total_posts = int(summary_df["posts"].sum()) if not summary_df.empty and "posts" in summary_df.columns else 0
+total_likes = int(summary_df["likes"].sum()) if not summary_df.empty and "likes" in summary_df.columns else 0
+total_shares = int(summary_df["shares"].sum()) if not summary_df.empty and "shares" in summary_df.columns else 0
+total_comments = int(summary_df["comments"].sum()) if not summary_df.empty and "comments" in summary_df.columns else 0
 
 with col1:
     st.markdown(f'<div class="metric-card"><div class="metric-title">Total Followers</div><div class="metric-value">{total_followers:,}</div></div>', unsafe_allow_html=True)
@@ -142,59 +159,110 @@ with col4:
 with col5:
     st.markdown(f'<div class="metric-card"><div class="metric-title">Total Comments</div><div class="metric-value">{total_comments:,}</div></div>', unsafe_allow_html=True)
 
-tab1, tab2, tab3 = st.tabs(["📊 Visual Analytics", "📑 Raw Engagement Data", "📈 Timeline Trends"])
+# -----------------------------------------------------------------------------
+# TABBED SECTIONS
+# -----------------------------------------------------------------------------
+tab1, tab2, tab3 = st.tabs(["📊 Analytics Overview", "📑 Raw Metric Cards", "📈 Timeline Trends"])
 
 with tab1:
-    col_chart1, col_chart2 = st.columns(2)
-    
-    with col_chart1:
-        st.subheader("Follower Distribution by Platform")
-        if not filtered_df.empty and "followers" in filtered_df.columns and "platform" in filtered_df.columns:
-            chart_df = filtered_df.groupby(["platform", "outlet_name"], as_index=False)["followers"].sum()
-            fig_bar = px.bar(
-                chart_df,
-                x="platform",
-                y="followers",
-                color="outlet_name",
-                barmode="group",
-                color_discrete_sequence=["#6B46C1", "#DD6B20", "#319795", "#D69E2E"],
-                text_auto='.2s'
-            )
-            fig_bar.update_layout(
-                plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
-                font=dict(color="#2D3748"),
-                xaxis=dict(showgrid=False),
-                yaxis=dict(showgrid=True, gridcolor="#E2E8F0")
-            )
-            st.plotly_chart(fig_bar, use_container_width=True)
-        else:
-            st.info("No follower metrics available to plot.")
-            
-    with col_chart2:
-        st.subheader("Engagement Share (Likes)")
-        if not filtered_df.empty and "likes" in filtered_df.columns and "platform" in filtered_df.columns:
-            pie_df = filtered_df.groupby("platform", as_index=False)["likes"].sum()
-            fig_pie = px.pie(
-                pie_df,
-                names="platform",
-                values="likes",
-                color_discrete_sequence=["#6B46C1", "#805AD5", "#9F7AEA", "#DD6B20", "#ED8936"]
-            )
-            fig_pie.update_layout(
-                plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
-                font=dict(color="#2D3748")
-            )
-            st.plotly_chart(fig_pie, use_container_width=True)
-        else:
-            st.info("No engagement metrics available to plot.")
+    if selected_platform == "All Platforms":
+        col_chart1, col_chart2 = st.columns(2)
+        
+        with col_chart1:
+            st.subheader("Follower Distribution by Platform")
+            if not summary_df.empty and "followers" in summary_df.columns and "platform" in summary_df.columns:
+                chart_df = summary_df.groupby(["platform", "outlet_name"], as_index=False)["followers"].sum()
+                fig_bar = px.bar(
+                    chart_df,
+                    x="platform",
+                    y="followers",
+                    color="outlet_name",
+                    barmode="group",
+                    color_discrete_sequence=["#6B46C1", "#DD6B20", "#319795", "#D69E2E"],
+                    text_auto='.2s'
+                )
+                fig_bar.update_layout(
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#2D3748"),
+                    xaxis=dict(showgrid=False),
+                    yaxis=dict(showgrid=True, gridcolor="#E2E8F0")
+                )
+                st.plotly_chart(fig_bar, use_container_width=True)
+            else:
+                st.info("No follower metrics available to plot.")
+                
+        with col_chart2:
+            st.subheader("Engagement Share (Likes)")
+            if not summary_df.empty and "likes" in summary_df.columns and "platform" in summary_df.columns:
+                pie_df = summary_df.groupby("platform", as_index=False)["likes"].sum()
+                fig_pie = px.pie(
+                    pie_df,
+                    names="platform",
+                    values="likes",
+                    color_discrete_sequence=["#6B46C1", "#805AD5", "#9F7AEA", "#DD6B20", "#ED8936"]
+                )
+                fig_pie.update_layout(
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#2D3748")
+                )
+                st.plotly_chart(fig_pie, use_container_width=True)
+            else:
+                st.info("No engagement metrics available to plot.")
+    else:
+        st.subheader(f"In-Depth {selected_platform} Metrics")
+        
+        avg_likes_per_post = round(total_likes / total_posts, 1) if total_posts > 0 else 0
+        est_er = round((total_likes / total_followers) * 100, 2) if total_followers > 0 else 0.0
+        
+        col_p1, col_p2, col_p3 = st.columns(3)
+        with col_p1:
+            st.markdown(f'<div class="sub-card"><h4>Avg Likes per Post</h4><h2 style="color:#6b46c1;">{avg_likes_per_post:,}</h2></div>', unsafe_allow_html=True)
+        with col_p2:
+            st.markdown(f'<div class="sub-card"><h4>Engagement Rate</h4><h2 style="color:#dd6b20;">{est_er}%</h2></div>', unsafe_allow_html=True)
+        with col_p3:
+            st.markdown(f'<div class="sub-card"><h4>Account Audience Reach</h4><h2 style="color:#319795;">{total_followers:,}</h2></div>', unsafe_allow_html=True)
 
 with tab2:
-    st.subheader("Raw Metrics Breakdown")
-    st.markdown("Detailed breakdown of posts, reach, likes, shares, and comments across all outlets.")
+    st.subheader("Raw Metric Breakdown (Latest Snapshots Only)")
+    st.markdown("Detailed view of the most recent snapshot for each outlet and platform combination.")
+    
     if not filtered_df.empty:
-        st.dataframe(filtered_df, use_container_width=True)
+        # Group by outlet_name and platform to take ONLY the single most recent record
+        if "record_date" in filtered_df.columns and "outlet_name" in filtered_df.columns and "platform" in filtered_df.columns:
+            latest_cards_df = filtered_df.sort_values("record_date", ascending=False).groupby(["outlet_name", "platform"]).first().reset_index()
+        else:
+            latest_cards_df = filtered_df.copy()
+
+        # Render one card per platform
+        for idx, row in latest_cards_df.iterrows():
+            outlet = row.get("outlet_name", "Unknown Outlet")
+            plat = row.get("platform", "Unknown Platform")
+            rec_date = row.get("record_date", "N/A")
+            f_count = int(row.get("followers", 0))
+            p_count = int(row.get("posts", 0))
+            l_count = int(row.get("likes", 0))
+            s_count = int(row.get("shares", 0))
+            c_count = int(row.get("comments", 0))
+            er_rate = row.get("engagement_rate", 0.0)
+
+            st.markdown(f"""
+            <div style="background: #ffffff; border-radius: 10px; padding: 18px; margin-bottom: 12px; border-left: 5px solid #6b46c1; box-shadow: 0 2px 4px rgba(0,0,0,0.04);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <strong style="font-size: 16px; color: #5a2789;">{outlet} — {plat}</strong>
+                    <span style="font-size: 12px; color: #718096;">Latest Snapshot: {rec_date}</span>
+                </div>
+                <div style="display: flex; gap: 24px; margin-top: 12px; flex-wrap: wrap;">
+                    <div><span style="font-size: 11px; color: #718096; text-transform: uppercase;">Followers</span><br/><strong style="font-size: 16px; color: #2d3748;">{f_count:,}</strong></div>
+                    <div><span style="font-size: 11px; color: #718096; text-transform: uppercase;">Posts</span><br/><strong style="font-size: 16px; color: #2d3748;">{p_count:,}</strong></div>
+                    <div><span style="font-size: 11px; color: #718096; text-transform: uppercase;">Likes</span><br/><strong style="font-size: 16px; color: #2d3748;">{l_count:,}</strong></div>
+                    <div><span style="font-size: 11px; color: #718096; text-transform: uppercase;">Shares</span><br/><strong style="font-size: 16px; color: #2d3748;">{s_count:,}</strong></div>
+                    <div><span style="font-size: 11px; color: #718096; text-transform: uppercase;">Comments</span><br/><strong style="font-size: 16px; color: #2d3748;">{c_count:,}</strong></div>
+                    <div><span style="font-size: 11px; color: #718096; text-transform: uppercase;">Engagement Rate</span><br/><strong style="font-size: 16px; color: #dd6b20;">{er_rate}%</strong></div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
     else:
         st.info("No raw data currently loaded.")
 
