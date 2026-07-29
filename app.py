@@ -17,6 +17,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# FIXED CSS: Explicitly dark text (#2d3748 / #718096) for all sub-card titles and values
 st.markdown("""
 <style>
     .main { 
@@ -42,22 +43,34 @@ st.markdown("""
     .metric-title { 
         font-size: 13px; 
         text-transform: uppercase; 
-        color: #718096; 
+        color: #718096 !important; 
         font-weight: 600; 
         margin-bottom: 5px; 
     }
     .metric-value { 
         font-size: 28px; 
         font-weight: 800; 
-        color: #1a202c; 
+        color: #1a202c !important; 
     }
     .sub-card {
         background: #ffffff;
         border-radius: 10px;
-        padding: 16px;
-        border-left: 4px solid #6b46c1;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+        padding: 20px;
+        border-left: 5px solid #6b46c1;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.04);
         margin-bottom: 12px;
+    }
+    .sub-card h4 {
+        color: #718096 !important;
+        font-size: 13px !important;
+        text-transform: uppercase;
+        margin-bottom: 8px !important;
+        font-weight: 600 !important;
+    }
+    .sub-card h2 {
+        font-size: 32px !important;
+        font-weight: 800 !important;
+        margin: 0 !important;
     }
     .stTabs [data-baseweb="tab-list"] { 
         gap: 8px; 
@@ -136,7 +149,6 @@ st.divider()
 # -----------------------------------------------------------------------------
 col1, col2, col3, col4, col5 = st.columns(5)
 
-# Deduplicate to ensure summary metrics operate on the single latest run per outlet/platform
 if not filtered_df.empty and "record_date" in filtered_df.columns and "outlet_name" in filtered_df.columns and "platform" in filtered_df.columns:
     summary_df = filtered_df.sort_values("record_date", ascending=False).groupby(["outlet_name", "platform"]).first().reset_index()
 else:
@@ -196,16 +208,23 @@ with tab1:
             st.subheader("Engagement Share (Likes)")
             if not summary_df.empty and "likes" in summary_df.columns and "platform" in summary_df.columns:
                 pie_df = summary_df.groupby("platform", as_index=False)["likes"].sum()
-                fig_pie = px.pie(
-                    pie_df,
-                    names="platform",
-                    values="likes",
-                    color_discrete_sequence=["#6B46C1", "#805AD5", "#9F7AEA", "#DD6B20", "#ED8936"]
-                )
+                
+                # CLEANER PIE CHART: Places labels outside with clear callout lines and hides microscopic zero text
+                fig_pie = go.Figure(data=[go.Pie(
+                    labels=pie_df["platform"],
+                    values=pie_df["likes"],
+                    hole=0.3,
+                    textinfo="label+percent",
+                    textposition="outside",
+                    marker=dict(colors=["#6B46C1", "#DD6B20", "#319795", "#805AD5", "#ED8936"])
+                )])
+                
                 fig_pie.update_layout(
                     plot_bgcolor="rgba(0,0,0,0)",
                     paper_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color="#2D3748")
+                    font=dict(color="#2D3748"),
+                    showlegend=True,
+                    margin=dict(t=30, b=30, l=30, r=30)
                 )
                 st.plotly_chart(fig_pie, use_container_width=True)
             else:
@@ -229,13 +248,11 @@ with tab2:
     st.markdown("Detailed view of the most recent snapshot for each outlet and platform combination.")
     
     if not filtered_df.empty:
-        # Group by outlet_name and platform to take ONLY the single most recent record
         if "record_date" in filtered_df.columns and "outlet_name" in filtered_df.columns and "platform" in filtered_df.columns:
             latest_cards_df = filtered_df.sort_values("record_date", ascending=False).groupby(["outlet_name", "platform"]).first().reset_index()
         else:
             latest_cards_df = filtered_df.copy()
 
-        # Render one card per platform
         for idx, row in latest_cards_df.iterrows():
             outlet = row.get("outlet_name", "Unknown Outlet")
             plat = row.get("platform", "Unknown Platform")
