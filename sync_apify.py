@@ -90,7 +90,6 @@ def sync_latest_apify_run():
 
 if __name__ == "__main__":
     sync_latest_apify_run()
-    return
 
     # Fetch dataset items
     dataset_items = apify_client.dataset(dataset_id).list_items().items
