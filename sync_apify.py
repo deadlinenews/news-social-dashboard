@@ -89,7 +89,8 @@ def sync_latest_apify_run():
         print(f"Successfully inserted {len(records_to_insert)} live scraped rows into Supabase!")
 
 if __name__ == "__main__":
-    sync_latest_apify_run()        return
+    sync_latest_apify_run()
+    return
 
     # Fetch dataset items
     dataset_items = apify_client.dataset(dataset_id).list_items().items
